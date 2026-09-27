@@ -354,7 +354,8 @@ function redrawRouteStyles() {
     }
 }
 
-// DC fast chargers along the planned route, from the DOE Alternative Fuels Station Locator.
+// DC fast chargers along the planned route, from the DOE Alternative Fuels Station Locator
+// (run by NLR, formerly NREL, whose developer.nrel.gov address no longer resolves).
 const CONNECTORS = { J1772COMBO: 'CCS', TESLA: 'NACS (Tesla)', CHADEMO: 'CHAdeMO', J1772: 'J1772' };
 async function loadChargers() {
     const cfg = Tracker.data?.config || {};
@@ -366,11 +367,11 @@ async function loadChargers() {
     const pts = plannedRoute.geometry.filter((_, i, a) => i % Math.ceil(a.length / 150) === 0 || i === a.length - 1);
     const body = new URLSearchParams({
         route: 'LINESTRING(' + pts.map(p => `${p[1].toFixed(4)} ${p[0].toFixed(4)}`).join(', ') + ')',
-        distance: '2', fuel_type: 'ELEC', ev_charging_level: 'dc_fast', status: 'E', access: 'public', limit: '400'
+        distance: '2', fuel_type: 'ELEC', ev_charging_level: 'dc_fast', status: 'E', access: 'public', limit: 'all'
     });
     try {
         const key = cfg.map?.nrel_api_key || 'DEMO_KEY';
-        const res = await fetch(`https://developer.nrel.gov/api/alt-fuel-stations/v1/nearby-route.json?api_key=${encodeURIComponent(key)}`, { method: 'POST', body });
+        const res = await fetch(`https://developer.nlr.gov/api/alt-fuel-stations/v1/nearby-route.json?api_key=${encodeURIComponent(key)}`, { method: 'POST', body });
         if (!res.ok) throw new Error(res.status);
         const data = await res.json();
         for (const s of data.fuel_stations || []) {

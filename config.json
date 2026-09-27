@@ -1,0 +1,37 @@
+{
+  "vehicle": {
+    "name": "Blazer",
+    "full_name": "2026 Chevrolet Blazer EV",
+    "color": "#02539E"
+  },
+  "team": {
+    "id": "erau",
+    "name": "Embry-Riddle Aeronautical University",
+    "logo": ""
+  },
+  "trip": {
+    "event": "Fall Workshop",
+    "mode": "idle",
+    "origin": {
+      "name": "ERAU, Daytona Beach, FL",
+      "lat": 29.1887,
+      "lng": -81.0482
+    },
+    "stops": [],
+    "destination": {
+      "name": "Argonne National Laboratory, Lemont, IL",
+      "lat": 41.7183,
+      "lng": -87.9786
+    },
+    "departure": "",
+    "arrival_radius_miles": 0.75
+  },
+  "map": {
+    "nrel_api_key": "DEMO_KEY"
+  },
+  "publish": {
+    "repo": "",
+    "branch": "tracker-data"
+  },
+  "updated_at": "2026-09-27T04:14:06+00:00"
+}

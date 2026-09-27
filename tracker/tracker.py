@@ -128,7 +128,7 @@ def github(method, path, token, body=None):
             body_file = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
             json.dump(body, body_file)
             body_file.close()
-            config += ['header = "Content-Type: application/json"', f'data-binary = "@{body_file.name}"']
+            config += ['header = "Content-Type: application/json"', f'data-binary = "@{Path(body_file.name).as_posix()}"']
         out = subprocess.run(["curl", "-K", "-"], input="\n".join(config), capture_output=True, text=True, timeout=60)
     finally:
         if body_file:

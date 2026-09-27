@@ -1,0 +1,11 @@
+# Things that stay on the tracker Mac and are never uploaded
+tracker/local_settings.json
+tracker/archive/
+data/live/
+
+# Clutter
+.DS_Store
+__pycache__/
+*.pyc
+*.log
+*.tmp

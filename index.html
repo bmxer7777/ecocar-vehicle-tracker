@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoCAR Vehicle Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="assets/viewer.css" />
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <img id="team-logo" class="logo" alt="" hidden>
+            <div class="title-group">
+                <h1><span id="vehicle-name">Vehicle</span> Tracker</h1>
+                <p id="subtitle">Loading…</p>
+            </div>
+        </div>
+
+        <div class="header-center">
+            <div class="headline">
+                <span class="label" id="headline-label"></span>
+                <span class="value" id="headline-value">Loading…</span>
+            </div>
+            <div class="progress-container" id="progress-container" hidden>
+                <div class="progress-bar"><div class="fill" id="progress-fill"></div></div>
+                <span class="progress-text" id="progress-text">0%</span>
+            </div>
+        </div>
+
+        <nav class="header-right">
+            <button class="tab-btn active" data-tab="map">Map</button>
+            <button class="tab-btn" data-tab="timeline">Timeline</button>
+            <button class="tab-btn" data-tab="stats">Stats</button>
+        </nav>
+    </header>
+
+    <div id="demo-banner" class="demo-banner" hidden>
+        Demo mode: made-up trip data so you can see how the tracker looks. Remove <code>?demo</code> from the URL for the real tracker.
+    </div>
+
+    <main class="main-content">
+        <section id="tab-map" class="tab-content active">
+            <div id="map"></div>
+            <div class="map-controls">
+                <button class="map-controls-toggle" id="layers-toggle" aria-expanded="true">Layers</button>
+                <div class="map-controls-body" id="layers-body">
+                    <label><input type="checkbox" id="layer-route" checked> Planned route</label>
+                    <label><input type="checkbox" id="layer-trail" checked> Location pings</label>
+                    <label><input type="checkbox" id="layer-gm" checked> <span class="swatch circle"></span> GM track teams</label>
+                    <label><input type="checkbox" id="layer-stellantis" checked> <span class="swatch square"></span> Stellantis track teams</label>
+                    <label><input type="checkbox" id="layer-chargers"> ⚡ DC fast chargers on route</label>
+                    <div class="layer-note" id="chargers-note"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-timeline" class="tab-content">
+            <div class="data-panel">
+                <h2>Stops</h2>
+                <ol class="timeline" id="timeline"></ol>
+                <h2>State splits</h2>
+                <table class="splits-table">
+                    <thead><tr><th>State</th><th>Time in state</th><th>Entered</th></tr></thead>
+                    <tbody id="splits-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="tab-stats" class="tab-content">
+            <div class="data-panel">
+                <h2>Trip statistics</h2>
+                <div class="journey-stats" id="journey-stats"></div>
+            </div>
+        </section>
+    </main>
+
+    <div class="stats-bar">
+        <div class="stat-card"><div class="label">Distance traveled</div><div class="value" id="distance">--</div><div class="subvalue">miles</div></div>
+        <div class="stat-card"><div class="label">Current location</div><div class="value" id="location">--</div><div class="subvalue" id="location-sub"></div></div>
+        <div class="stat-card"><div class="label">Remaining</div><div class="value" id="remaining">--</div><div class="subvalue" id="remaining-sub">miles</div></div>
+        <div class="stat-card"><div class="label">Recent speed</div><div class="value" id="speed-recent">--</div><div class="subvalue" id="speed-recent-sub">mph</div></div>
+        <div class="stat-card"><div class="label">States crossed</div><div class="value" id="states">--</div><div class="subvalue" id="states-list"></div></div>
+        <div class="stat-card"><div class="label">Time on the road</div><div class="value" id="time">--</div><div class="subvalue" id="time-sub"></div></div>
+    </div>
+
+    <footer class="status-bar">
+        <div class="status"><div class="dot" id="status-dot"></div><span id="status-text">Connecting…</span></div>
+        <div class="last-update">Last AirTag fix: <span id="last-fix">--</span> · Page refreshed: <span id="page-refresh">--</span></div>
+    </footer>
+
+    <script src="assets/viewer.js"></script>
+</body>
+</html>

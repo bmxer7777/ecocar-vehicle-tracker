@@ -1,0 +1,30 @@
+{
+  "_about": "EcoCAR Innovation Challenge (2026-2030) teams, from the official list at avtcseries.org. Colors are each school's primary/secondary brand colors. To show a logo instead of a dot, put a square image in assets/logos/ and add \"logo\": \"assets/logos/<file>.png\" to that team. Edit this file when the roster changes.",
+  "tracks": {
+    "gm": { "name": "GM track", "vehicle": "2026 Chevrolet Blazer EV" },
+    "stellantis": { "name": "Stellantis track", "vehicle": "2026 Jeep Cherokee" }
+  },
+  "teams": [
+    { "id": "erau",      "name": "Embry-Riddle Aeronautical University", "short": "ERAU",       "city": "Daytona Beach, FL", "lat": 29.1887, "lng": -81.0482, "track": "gm", "colors": ["#003A70", "#FFB81C"] },
+    { "id": "gatech",    "name": "Georgia Institute of Technology",      "short": "Georgia Tech", "city": "Atlanta, GA",     "lat": 33.7756, "lng": -84.3963, "track": "gm", "colors": ["#B3A369", "#003057"] },
+    { "id": "mcmaster",  "name": "McMaster University",                  "short": "McMaster",   "city": "Hamilton, ON",      "lat": 43.2609, "lng": -79.9192, "track": "gm", "colors": ["#7A003C", "#FDBF57"] },
+    { "id": "msstate",   "name": "Mississippi State University",         "short": "Mississippi State", "city": "Starkville, MS", "lat": 33.4552, "lng": -88.7944, "track": "gm", "colors": ["#660000", "#FFFFFF"] },
+    { "id": "pennstate", "name": "Pennsylvania State University",        "short": "Penn State", "city": "University Park, PA", "lat": 40.7982, "lng": -77.8599, "track": "gm", "colors": ["#041E42", "#FFFFFF"] },
+    { "id": "alabama",   "name": "The University of Alabama",            "short": "Alabama",    "city": "Tuscaloosa, AL",    "lat": 33.2140, "lng": -87.5391, "track": "gm", "colors": ["#9E1B32", "#FFFFFF"] },
+    { "id": "wisconsin", "name": "University of Wisconsin-Madison",      "short": "UW-Madison", "city": "Madison, WI",       "lat": 43.0766, "lng": -89.4125, "track": "gm", "colors": ["#C5050C", "#FFFFFF"] },
+    { "id": "vt",        "name": "Virginia Tech",                        "short": "Virginia Tech", "city": "Blacksburg, VA", "lat": 37.2284, "lng": -80.4234, "track": "gm", "colors": ["#630031", "#CF4420"] },
+    { "id": "wmich",     "name": "Western Michigan University",          "short": "Western Michigan", "city": "Kalamazoo, MI", "lat": 42.2828, "lng": -85.6130, "track": "gm", "colors": ["#6C4023", "#F1C500"] },
+    { "id": "wvu",       "name": "West Virginia University",             "short": "WVU",        "city": "Morgantown, WV",    "lat": 39.6480, "lng": -79.9559, "track": "gm", "colors": ["#002855", "#EAAA00"] },
+
+    { "id": "calstatela", "name": "California State University, Los Angeles", "short": "Cal State LA", "city": "Los Angeles, CA", "lat": 34.0664, "lng": -118.1686, "track": "stellantis", "colors": ["#000000", "#FFC72C"] },
+    { "id": "mines",     "name": "Colorado School of Mines",             "short": "Mines",      "city": "Golden, CO",        "lat": 39.7510, "lng": -105.2226, "track": "stellantis", "colors": ["#21314D", "#879EC3"] },
+    { "id": "lsu",       "name": "Louisiana State University",           "short": "LSU",        "city": "Baton Rouge, LA",   "lat": 30.4133, "lng": -91.1800, "track": "stellantis", "colors": ["#461D7C", "#FDD023"] },
+    { "id": "osu",       "name": "The Ohio State University",            "short": "Ohio State", "city": "Columbus, OH",      "lat": 40.0017, "lng": -83.0197, "track": "stellantis", "colors": ["#BB0000", "#666666"] },
+    { "id": "rosehulman", "name": "Rose-Hulman Institute of Technology", "short": "Rose-Hulman", "city": "Terre Haute, IN",  "lat": 39.4830, "lng": -87.3241, "track": "stellantis", "colors": ["#800000", "#FFFFFF"] },
+    { "id": "tamu",      "name": "Texas A&M University",                 "short": "Texas A&M",  "city": "College Station, TX", "lat": 30.6187, "lng": -96.3365, "track": "stellantis", "colors": ["#500000", "#FFFFFF"] },
+    { "id": "buffalo",   "name": "University at Buffalo",                "short": "Buffalo",    "city": "Buffalo, NY",       "lat": 43.0008, "lng": -78.7890, "track": "stellantis", "colors": ["#005BBB", "#FFFFFF"] },
+    { "id": "uncc",      "name": "University of North Carolina at Charlotte", "short": "UNC Charlotte", "city": "Charlotte, NC", "lat": 35.3071, "lng": -80.7352, "track": "stellantis", "colors": ["#005035", "#A49665"] },
+    { "id": "utk",       "name": "University of Tennessee, Knoxville",   "short": "Tennessee",  "city": "Knoxville, TN",     "lat": 35.9544, "lng": -83.9295, "track": "stellantis", "colors": ["#FF8200", "#FFFFFF"] },
+    { "id": "waterloo",  "name": "University of Waterloo",               "short": "Waterloo",   "city": "Waterloo, ON",      "lat": 43.4723, "lng": -80.5449, "track": "stellantis", "colors": ["#000000", "#FED34C"] }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "_about": "Saved places that show up as one-click choices in the setup page. Add your own. Coordinates for sponsor sites are approximate; use the setup page's address search if you need a precise pin.",
+  "places": [
+    { "name": "ERAU, Daytona Beach, FL",                    "lat": 29.1887, "lng": -81.0482 },
+    { "name": "Argonne National Laboratory, Lemont, IL",    "lat": 41.7183, "lng": -87.9786 },
+    { "name": "GM Milford Proving Ground, Milford, MI",     "lat": 42.5790, "lng": -83.6770 },
+    { "name": "GM Global Technical Center, Warren, MI",     "lat": 42.5145, "lng": -83.0373 },
+    { "name": "Stellantis CTC, Auburn Hills, MI",           "lat": 42.6535, "lng": -83.2345 },
+    { "name": "CARB, Riverside, CA",                        "lat": 33.9725, "lng": -117.3425 },
+    { "name": "MathWorks, Natick, MA",                      "lat": 42.3001, "lng": -71.3503 }
+  ],
+  "events": [
+    "Fall Workshop",
+    "Spring Workshop",
+    "Y1 Competition",
+    "Y2 Competition",
+    "Y3 Competition",
+    "Y4 Competition",
+    "Vehicle Delivery",
+    "Testing",
+    "Emissions Testing",
+    "Outreach Event"
+  ]
+}

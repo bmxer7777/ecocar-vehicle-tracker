@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracker Setup</title>
+<style>
+    :root {
+        --bg: #0a0a0a; --panel: #111; --card: #1a1a2e; --border: #333; --text: #fff;
+        --muted: #999; --accent: #00d4ff; --good: #00ff88; --warn: #ffaa00; --bad: #ff5555;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.45; }
+    header { background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 1.3rem; font-weight: 600; }
+    header h1 span { color: var(--accent); }
+    header .links a { color: var(--accent); margin-left: 16px; font-size: 0.9rem; }
+    main { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; display: grid; gap: 20px; }
+    section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    section > h2 { font-size: 1.05rem; margin-bottom: 4px; display: flex; gap: 10px; align-items: center; }
+    section > h2 .num { background: var(--accent); color: #000; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; flex: none; }
+    .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin: 12px 0 4px; }
+    input, select { width: 100%; background: #0b0b0b; border: 1px solid #444; color: var(--text); border-radius: 8px; padding: 9px 11px; font-size: 0.95rem; font-family: inherit; }
+    input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    input[type=color] { padding: 2px; height: 40px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+    button { background: #2a2a40; color: var(--text); border: 1px solid #444; border-radius: 8px; padding: 9px 16px; font-size: 0.9rem; cursor: pointer; font-family: inherit; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+    button.danger { border-color: #663; }
+    button.small { padding: 5px 10px; font-size: 0.8rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: center; }
+    .msg { font-size: 0.85rem; }
+    .msg.ok { color: var(--good); } .msg.err { color: var(--bad); } .msg.warn { color: var(--warn); }
+
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .stat .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+    .stat .v { font-size: 1.05rem; font-weight: 600; margin-top: 2px; word-break: break-word; }
+    .big-toggle { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .switch { position: relative; width: 64px; height: 34px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch span { position: absolute; inset: 0; background: #444; border-radius: 34px; cursor: pointer; transition: 0.2s; }
+    .switch span::before { content: ''; position: absolute; width: 26px; height: 26px; left: 4px; top: 4px; background: #fff; border-radius: 50%; transition: 0.2s; }
+    .switch input:checked + span { background: var(--good); }
+    .switch input:checked + span::before { transform: translateX(30px); }
+    .switch input:focus-visible + span { outline: 2px solid var(--accent); }
+    .tracking-label { font-size: 1.2rem; font-weight: 600; }
+
+    .items { display: grid; gap: 8px; margin-top: 12px; }
+    .item { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .item.chosen { border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
+    .item .emoji { font-size: 1.5rem; width: 32px; text-align: center; }
+    .item .info { flex: 1; min-width: 0; }
+    .item .name { font-weight: 600; }
+    .item .meta { font-size: 0.8rem; color: var(--muted); }
+    .item .tag { font-size: 0.65rem; text-transform: uppercase; color: var(--muted); border: 1px solid #444; border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+
+    .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .mode { border: 1px solid #444; border-radius: 10px; padding: 12px; cursor: pointer; display: block; margin: 0; color: var(--text); }
+    .mode input { width: auto; margin-right: 6px; accent-color: var(--accent); }
+    .mode b { font-size: 0.95rem; }
+    .mode small { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+    .mode:has(input:checked) { border-color: var(--accent); background: rgba(0, 212, 255, 0.08); }
+
+    .place { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 10px; }
+    .place-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .place-head b { font-size: 0.85rem; }
+    .place-chosen { font-size: 0.9rem; margin: 6px 0; }
+    .place-chosen.empty { color: var(--muted); }
+    .place-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .results { display: grid; gap: 4px; margin-top: 6px; }
+    .results button { text-align: left; font-size: 0.8rem; background: #0b0b0b; }
+
+    pre.log { background: #050505; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 0.75rem; color: #bbb; max-height: 240px; overflow: auto; white-space: pre-wrap; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; margin-top: 10px; }
+    code { background: #222; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+    a { color: var(--accent); }
+    @media (max-width: 640px) { .row, .row3, .modes, .place-pick { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+    <h1><span>Tracker</span> Setup · runs on this Mac</h1>
+    <div class="links">
+        <a href="/" target="_blank">Preview tracker page ↗</a>
+        <a id="public-link" href="#" target="_blank" hidden>Public tracker ↗</a>
+    </div>
+</header>
+
+<main>
+    <!-- Status -->
+    <section>
+        <div class="big-toggle">
+            <label class="switch" style="margin:0"><input type="checkbox" id="tracking"><span></span></label>
+            <div>
+                <div class="tracking-label" id="tracking-label">Tracking is OFF</div>
+                <div class="hint" style="margin:0">Keep this Mac plugged in, awake, and signed in. You can close this browser tab; the tracker keeps running in Terminal.</div>
+            </div>
+            <button id="check-now" class="small" style="margin-left:auto">Check now</button>
+        </div>
+        <div class="status-grid">
+            <div class="stat"><div class="k">AirTag</div><div class="v" id="s-airtag">not chosen</div></div>
+            <div class="stat"><div class="k">Last AirTag fix</div><div class="v" id="s-fix">--</div></div>
+            <div class="stat"><div class="k">Last published</div><div class="v" id="s-pub">never</div></div>
+            <div class="stat"><div class="k">Pings this trip</div><div class="v" id="s-pings">0</div></div>
+        </div>
+        <div class="msg err" id="s-error" style="margin-top:10px"></div>
+    </section>
+
+    <!-- AirTag -->
+    <section>
+        <h2><span class="num">1</span> Choose the AirTag</h2>
+        <p class="hint">Lists everything in this Mac's Find My app. The AirTag has to belong to, or be shared with, the Apple ID signed in on this Mac. Shared items appear after you accept the share on an iPhone.</p>
+        <button id="load-items" class="primary">Find AirTags</button>
+        <div class="msg" id="items-msg" style="margin-top:10px"></div>
+        <div class="items" id="items"></div>
+    </section>
+
+    <!-- Trip -->
+    <section>
+        <h2><span class="num">2</span> Trip details</h2>
+        <p class="hint">This is what everyone sees on the public tracker page. Saving updates the public page within a few minutes.</p>
+
+        <div class="row3">
+            <div><label for="vehicle-name">Vehicle name</label><input id="vehicle-name" placeholder="Blazer"></div>
+            <div><label for="vehicle-color">Map color</label><input id="vehicle-color" type="color" value="#00d4ff"></div>
+            <div><label for="team">Home team</label><select id="team"></select></div>
+        </div>
+
+        <div class="row">
+            <div>
+                <label for="event">Event</label>
+                <select id="event"></select>
+            </div>
+            <div id="event-custom-wrap" hidden>
+                <label for="event-custom">Event name</label>
+                <input id="event-custom" placeholder="e.g. Media Day">
+            </div>
+        </div>
+
+        <label>What is the vehicle doing?</label>
+        <div class="modes">
+            <label class="mode"><input type="radio" name="mode" value="driving"><b>Driving to an event</b><small>Shows the route, progress and ETA.</small></label>
+            <label class="mode"><input type="radio" name="mode" value="parked"><b>Parked at an event</b><small>Shows "At &lt;venue&gt; since…". No ETA.</small></label>
+            <label class="mode"><input type="radio" name="mode" value="idle"><b>Not traveling</b><small>The page shows the next trip, or that nothing is happening.</small></label>
+        </div>
+
+        <div id="places"></div>
+        <div class="actions" style="margin-top:10px"><button id="add-stop" class="small">+ Add a stop</button><span class="hint" style="margin:0">Overnight hotel, charging break, a test site on the way…</span></div>
+
+        <div class="row">
+            <div><label for="departure">Departure (your local time)</label><input id="departure" type="datetime-local"></div>
+            <div><label for="radius">"Arrived" when within (miles)</label><input id="radius" type="number" min="0.1" max="20" step="0.25" value="0.75"></div>
+        </div>
+
+        <div class="actions">
+            <button id="save-trip" class="primary">Save trip</button>
+            <button id="new-trip" class="danger">Start a new trip (clear pings)</button>
+            <span class="msg" id="trip-msg"></span>
+        </div>
+    </section>
+
+    <!-- Publishing -->
+    <section>
+        <h2><span class="num">3</span> Publishing to GitHub</h2>
+        <p class="hint">Where the public tracker lives. Follow README step 3 to make a token. It's stored only on this Mac in <code>tracker/local_settings.json</code>.</p>
+        <div class="row">
+            <div><label for="repo">GitHub repository (owner/name)</label><input id="repo" placeholder="erau-ecocar/vehicle-tracker"></div>
+            <div><label for="token">Access token</label><input id="token" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+        </div>
+        <div class="row">
+            <div><label for="interval">Check Find My every (minutes)</label><input id="interval" type="number" min="1" max="60" value="2"></div>
+            <div></div>
+        </div>
+        <div class="actions">
+            <button id="save-settings" class="primary">Save &amp; test connection</button>
+            <a id="token-link" href="#" target="_blank">Make a token on GitHub ↗</a>
+            <span class="msg" id="pub-msg"></span>
+        </div>
+    </section>
+
+    <!-- Log -->
+    <section>
+        <h2>Activity log</h2>
+        <pre class="log" id="log"></pre>
+    </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let state = null, places = { places: [], events: [] }, teams = { teams: [] };
+let trip = { origin: null, stops: [], destination: null };
+let dirty = false;
+
+async function api(path, body) {
+    const res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+}
+function say(id, text, kind = '') { const el = $(id); el.textContent = text; el.className = 'msg ' + kind; }
+const ago = ts => { if (!ts) return '--'; const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.floor(m / 60)}h ${m % 60}m ago` : `${Math.floor(m / 1440)} days ago`; };
+
+// ---------- places ----------
+function placeCard(role, index) {
+    const p = role === 'stop' ? trip.stops[index] : trip[role];
+    const title = role === 'origin' ? 'Start' : role === 'destination' ? (currentMode() === 'parked' ? 'Venue (where it\'s parked)' : 'Destination') : `Stop ${index + 1}`;
+    const div = document.createElement('div');
+    div.className = 'place';
+    div.innerHTML = `
+        <div class="place-head"><b>${esc(title)}</b>${role === 'stop' ? '<button class="small" data-remove>Remove</button>' : ''}</div>
+        <div class="place-chosen ${p ? '' : 'empty'}">${p ? '✓ ' + esc(p.name) + ` <span style="color:#777">(${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})</span>` : 'Not set'}</div>
+        <div class="place-pick">
+            <select data-saved><option value="">Saved places…</option>${places.places.map((pl, i) => `<option value="${i}">${esc(pl.name)}</option>`).join('')}</select>
+            <input data-search placeholder="…or search an address and press Enter">
+        </div>
+        <div class="results" data-results></div>`;
+    const set = val => { if (role === 'stop') trip.stops[index] = val; else trip[role] = val; dirty = true; renderPlaces(); };
+    div.querySelector('[data-saved]').addEventListener('change', e => { if (e.target.value !== '') set({ ...places.places[+e.target.value] }); });
+    div.querySelector('[data-remove]')?.addEventListener('click', () => { trip.stops.splice(index, 1); dirty = true; renderPlaces(); });
+    const search = div.querySelector('[data-search]'), results = div.querySelector('[data-results]');
+    search.addEventListener('keydown', async e => {
+        if (e.key !== 'Enter' || !search.value.trim()) return;
+        e.preventDefault();
+        results.innerHTML = '<span class="hint">Searching…</span>';
+        try {
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=us,ca&q=${encodeURIComponent(search.value)}`);
+            const list = await r.json();
+            results.innerHTML = list.length ? '' : '<span class="hint">No matches. Try adding the city and state.</span>';
+            list.forEach(hit => {
+                const b = document.createElement('button');
+                b.className = 'small';
+                b.textContent = hit.display_name;
+                b.addEventListener('click', () => {
+                    const short = search.value.trim().length > 3 ? search.value.trim() : hit.display_name.split(',').slice(0, 3).join(',');
+                    set({ name: short, lat: +(+hit.lat).toFixed(5), lng: +(+hit.lon).toFixed(5) });
+                });
+                results.appendChild(b);
+            });
+        } catch (err) { results.innerHTML = '<span class="msg err">Address search failed (are you online?)</span>'; }
+    });
+    return div;
+}
+function renderPlaces() {
+    const wrap = $('places');
+    wrap.innerHTML = '';
+    const parked = currentMode() === 'parked';
+    if (!parked) wrap.appendChild(placeCard('origin'));
+    if (!parked) trip.stops.forEach((_, i) => wrap.appendChild(placeCard('stop', i)));
+    wrap.appendChild(placeCard('destination'));
+    $('add-stop').parentElement.hidden = parked;
+}
+const currentMode = () => document.querySelector('input[name=mode]:checked')?.value || 'idle';
+
+// ---------- load / save ----------
+function fillForm(config) {
+    const t = config.trip || {};
+    $('vehicle-name').value = config.vehicle?.name || 'Blazer';
+    $('vehicle-color').value = config.vehicle?.color || '#00d4ff';
+    $('team').innerHTML = teams.teams.map(tm => `<option value="${esc(tm.id)}">${esc(tm.short)} (${esc(tm.track === 'gm' ? 'GM' : 'Stellantis')})</option>`).join('') + '<option value="">Other / not listed</option>';
+    $('team').value = config.team?.id ?? 'erau';
+    const events = places.events || [];
+    $('event').innerHTML = events.map(e => `<option>${esc(e)}</option>`).join('') + '<option value="__custom">Other…</option>';
+    if (t.event && !events.includes(t.event)) { $('event').value = '__custom'; $('event-custom').value = t.event; }
+    else $('event').value = t.event || events[0] || '__custom';
+    $('event-custom-wrap').hidden = $('event').value !== '__custom';
+    (document.querySelector(`input[name=mode][value="${t.mode || 'idle'}"]`) || {}).checked = true;
+    trip = { origin: t.origin || null, stops: [...(t.stops || [])], destination: t.destination || null };
+    if (t.departure) {
+        const d = new Date(t.departure);
+        $('departure').value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+    $('radius').value = t.arrival_radius_miles || 0.75;
+    renderPlaces();
+    dirty = false;
+}
+
+function collectConfig() {
+    const base = state.config || {};
+    const teamId = $('team').value;
+    const team = teams.teams.find(t => t.id === teamId);
+    const event = $('event').value === '__custom' ? $('event-custom').value.trim() : $('event').value;
+    return {
+        ...base,
+        vehicle: { ...(base.vehicle || {}), name: $('vehicle-name').value.trim() || 'Vehicle', color: $('vehicle-color').value },
+        team: { ...(base.team || {}), id: teamId, name: team ? team.name : (base.team?.name || '') },
+        trip: {
+            event,
+            mode: currentMode(),
+            origin: trip.origin,
+            stops: trip.stops.filter(Boolean),
+            destination: trip.destination,
+            departure: $('departure').value ? new Date($('departure').value).toISOString() : '',
+            arrival_radius_miles: parseFloat($('radius').value) || 0.75,
+        },
+    };
+}
+
+function renderState() {
+    const s = state.settings, st = state.status;
+    $('tracking').checked = !!s.tracking;
+    $('tracking-label').textContent = s.tracking ? 'Tracking is ON' : 'Tracking is OFF';
+    $('s-airtag').textContent = s.airtag_name || 'not chosen';
+    $('s-fix').textContent = st.last_fix ? ago(st.last_fix) : '--';
+    $('s-pub').textContent = st.last_publish ? ago(st.last_publish) : 'never';
+    $('s-pings').textContent = state.pings;
+    $('s-error').textContent = st.last_error || '';
+    $('log').textContent = state.log.join('\n');
+    $('log').scrollTop = $('log').scrollHeight;
+    if (state.public_url) { $('public-link').href = state.public_url; $('public-link').hidden = false; }
+    if (document.activeElement !== $('repo')) $('repo').value = s.repo || '';
+    if (document.activeElement !== $('interval')) $('interval').value = s.interval_minutes || 2;
+    $('token').placeholder = s.token_set ? '•••••••• saved (leave blank to keep)' : (s.gh_cli ? 'optional: using your GitHub CLI login' : 'github_pat_…');
+    updateTokenLink();
+}
+
+function updateTokenLink() {
+    const repo = $('repo').value.trim();
+    const [owner, name] = repo.split('/');
+    const q = new URLSearchParams({ name: `EcoCAR tracker (${new Date().getFullYear()})`, description: 'Lets the vehicle tracker Mac publish location updates', expires_in: '366', contents: 'write' });
+    if (owner) q.set('target_name', owner);
+    $('token-link').href = 'https://github.com/settings/personal-access-tokens/new?' + q;
+    $('token-link').title = name ? `On the next page, under "Repository access", choose "Only select repositories" and pick ${name}.` : '';
+}
+
+async function refreshState(initial = false) {
+    try {
+        state = await api('/api/state');
+        if (initial) fillForm(state.config);
+        renderState();
+    } catch (e) { $('s-error').textContent = 'Lost contact with the tracker. Is it still running in Terminal?'; }
+}
+
+// ---------- events ----------
+$('tracking').addEventListener('change', async e => {
+    await api('/api/tracking', { on: e.target.checked });
+    refreshState();
+});
+$('check-now').addEventListener('click', async () => { await api('/api/check-now', {}); setTimeout(refreshState, 8000); });
+$('event').addEventListener('change', () => { $('event-custom-wrap').hidden = $('event').value !== '__custom'; dirty = true; });
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => { dirty = true; renderPlaces(); }));
+$('add-stop').addEventListener('click', () => { trip.stops.push(null); dirty = true; renderPlaces(); });
+document.querySelectorAll('main input, main select').forEach(el => el.addEventListener('input', () => { dirty = true; }));
+
+$('load-items').addEventListener('click', async () => {
+    say('items-msg', 'Reading Find My…');
+    $('items').innerHTML = '';
+    try {
+        const { items } = await api('/api/items');
+        if (!items.length) return say('items-msg', 'Find My has no items on this Mac. Open the Find My app, check the Items tab, and try again.', 'warn');
+        say('items-msg', 'Click the one that is in the vehicle.');
+        items.forEach(it => {
+            const div = document.createElement('div');
+            div.className = 'item' + (it.id === state.settings.airtag_id ? ' chosen' : '');
+            const where = [it.address?.locality, it.address?.administrativeArea].filter(Boolean).join(', ');
+            div.innerHTML = `<div class="emoji">${esc(it.emoji)}</div>
+                <div class="info"><div class="name">${esc(it.name)}<span class="tag">${it.kind === 'item' ? 'AirTag / item' : 'Apple device'}</span></div>
+                <div class="meta">${it.latitude == null ? 'No location right now' : esc(where || `${it.latitude.toFixed(4)}, ${it.longitude.toFixed(4)}`) + ' · seen ' + ago(it.timestamp)}</div></div>
+                <button class="${it.id === state.settings.airtag_id ? '' : 'primary'} small">${it.id === state.settings.airtag_id ? 'Chosen ✓' : 'Use this one'}</button>`;
+            div.querySelector('button').addEventListener('click', async () => {
+                await api('/api/settings', { airtag_id: it.id, airtag_name: it.name });
+                await refreshState();
+                $('load-items').click();
+            });
+            $('items').appendChild(div);
+        });
+    } catch (e) { say('items-msg', e.message, 'err'); }
+});
+
+$('save-trip').addEventListener('click', async () => {
+    const config = collectConfig();
+    const t = config.trip;
+    if (!t.destination) return say('trip-msg', t.mode === 'parked' ? 'Set the venue first.' : 'Set a destination first.', 'err');
+    if (t.mode === 'driving' && !t.origin) return say('trip-msg', 'Set where the trip starts.', 'err');
+    if (!t.event) return say('trip-msg', 'Give the event a name.', 'err');
+    say('trip-msg', 'Saving…');
+    try {
+        const r = await api('/api/config', { config });
+        dirty = false;
+        await refreshState();
+        say('trip-msg', r.published ? 'Saved and published ✓' : (state.settings.repo ? 'Saved on this Mac, but publishing failed (see the error above).' : 'Saved on this Mac. Set up Publishing (step 3) to make it public.'), r.published ? 'ok' : 'warn');
+    } catch (e) { say('trip-msg', e.message, 'err'); }
+});
+
+$('new-trip').addEventListener('click', async () => {
+    if (!confirm('Start a new trip? The pings recorded so far are saved to tracker/archive/ on this Mac, then the public map is cleared.')) return;
+    await api('/api/new-trip', {});
+    await refreshState();
+    say('trip-msg', 'New trip started. Old pings are in tracker/archive/.', 'ok');
+});
+
+$('repo').addEventListener('input', updateTokenLink);
+$('save-settings').addEventListener('click', async () => {
+    say('pub-msg', 'Saving…');
+    try {
+        const body = { repo: $('repo').value.trim(), interval_minutes: parseInt($('interval').value, 10) || 2 };
+        if ($('token').value.trim()) body.token = $('token').value.trim();
+        await api('/api/settings', body);
+        $('token').value = '';
+        say('pub-msg', 'Testing connection to GitHub…');
+        const r = await api('/api/test-publish', {});
+        await refreshState();
+        say('pub-msg', r.ok ? 'Connected ✓ The public page will pick up changes within a few minutes.' : r.error, r.ok ? 'ok' : 'err');
+    } catch (e) { say('pub-msg', e.message, 'err'); }
+});
+
+window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+(async function init() {
+    [places, teams] = await Promise.all([
+        fetch('/data/places.json').then(r => r.json()).catch(() => ({ places: [], events: [] })),
+        fetch('/data/teams.json').then(r => r.json()).catch(() => ({ teams: [] })),
+    ]);
+    await refreshState(true);
+    setInterval(refreshState, 10000);
+})();
+</script>
+</body>
+</html>

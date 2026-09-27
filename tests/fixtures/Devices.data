@@ -1,0 +1,9 @@
+[
+  {
+    "id": "device-abc",
+    "name": "Team MacBook",
+    "deviceDisplayName": "MacBook Pro",
+    "location": { "latitude": 29.1887, "longitude": -81.0482, "horizontalAccuracy": 35, "timeStamp": 1770652000000 },
+    "address": { "locality": "Daytona Beach", "administrativeArea": "Florida", "stateCode": "FL" }
+  }
+]

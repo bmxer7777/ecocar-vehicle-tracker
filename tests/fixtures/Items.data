@@ -1,0 +1,29 @@
+[
+  {
+    "identifier": "8C1D2E3F-0000-4A1B-9C2D-3E4F5A6B7C8D",
+    "name": "ERAU Blazer",
+    "role": { "name": "Car", "emoji": "🚙", "identifier": 5 },
+    "productType": { "type": "b389" },
+    "location": {
+      "latitude": 31.1968748,
+      "longitude": -105.4474748,
+      "horizontalAccuracy": 20.46,
+      "timeStamp": 1770652368000,
+      "positionType": "crowdsourced"
+    },
+    "address": {
+      "locality": "El Paso",
+      "administrativeArea": "Texas",
+      "stateCode": "TX",
+      "countryCode": "US",
+      "formattedAddressLines": ["IH-10 E", "El Paso, TX  79938", "United States"]
+    }
+  },
+  {
+    "identifier": "11111111-2222-3333-4444-555555555555",
+    "name": "Backpack",
+    "role": { "name": "Backpack", "emoji": "🎒" },
+    "location": null,
+    "address": null
+  }
+]

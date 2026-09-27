@@ -16,7 +16,7 @@ fi
 echo "=========================================================="
 echo "  EcoCAR Vehicle Tracker"
 echo "  Keep this window open while tracking. Closing it stops the tracker."
-echo "  The setup page opens in your browser: http://localhost:8765/setup"
+echo "  The tracker opens in your browser: http://localhost:8765 (settings: the gear, top right)"
 echo "=========================================================="
 echo
 

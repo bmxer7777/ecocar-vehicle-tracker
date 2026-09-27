@@ -17,7 +17,7 @@ CACHE_FILES = {"item": CACHE_DIR / "Items.data", "device": CACHE_DIR / "Devices.
 
 
 class FindMyError(Exception):
-    """Something the person running the tracker needs to fix. The message is shown in the setup page."""
+    """Something the person running the tracker needs to fix. The message is shown in Settings."""
 
 
 def refresh(wait_seconds=5):

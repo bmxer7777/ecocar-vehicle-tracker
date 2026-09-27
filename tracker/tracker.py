@@ -4,19 +4,23 @@ EcoCAR Vehicle Tracker - the part that runs on a Mac.
 
     python3 tracker/tracker.py
 
-Opens the setup page at http://localhost:8765/setup. From there you pick the AirTag,
-fill in the trip, and turn tracking on. While tracking is on, this script:
+Opens the tracker page at http://localhost:8765 with the Settings panel (the gear). From there
+you pick the AirTag, fill in the trip, and turn tracking on. While tracking is on, this script:
   1. nudges the Find My app so its location cache stays fresh,
   2. reads the AirTag's latest position from that cache,
   3. appends new positions to data/live/location_history.json,
   4. publishes config.json + location_history.json to the repo's "tracker-data" branch,
      which the public GitHub Pages viewer reads.
+Trip settings changed on the public page (by someone with the team's GitHub key) are picked up
+before each publish, so the Mac never overwrites them.
 
 Only the Python standard library is used, so there is nothing to pip install.
 """
 
+import base64
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -28,7 +32,7 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).parent))
 import findmy  # noqa: E402
@@ -41,7 +45,6 @@ CONFIG_FILE = LIVE / "config.json"
 HISTORY_FILE = LIVE / "location_history.json"
 SETTINGS_FILE = Path(__file__).parent / "local_settings.json"  # holds the GitHub token; never published or served
 ARCHIVE_DIR = Path(__file__).parent / "archive"
-SETUP_PAGE = Path(__file__).parent / "setup.html"
 
 DEFAULT_SETTINGS = {
     "airtag_id": "",
@@ -101,7 +104,7 @@ def load_history():
 # ---------- GitHub publishing ----------
 
 def github_token(settings):
-    """The token from the setup page, or (for developers) the GitHub CLI's login."""
+    """The token from Settings, or (for developers) the GitHub CLI's login."""
     if settings.get("token"):
         return settings["token"]
     if shutil.which("gh"):
@@ -141,6 +144,32 @@ def github(method, path, token, body=None):
     return code, data
 
 
+def parse_time(value):
+    """ISO 8601 -> epoch seconds (0 if missing). Handles the browser's trailing 'Z' on Python 3.9."""
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0
+
+
+def sync_remote_config(repo, branch, token):
+    """Adopt config.json from GitHub if it was edited on the public page after this Mac last saved."""
+    code, data = github("GET", f"/repos/{repo}/contents/config.json?ref={branch}", token)
+    if code != 200 or "content" not in data:
+        return False
+    try:
+        remote = json.loads(base64.b64decode(data["content"]).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return False
+    local = read_json(CONFIG_FILE, {})
+    if parse_time(remote.get("updated_at")) > parse_time(local.get("updated_at")):
+        write_json(CONFIG_FILE, remote)
+        trip = remote.get("trip", {})
+        log(f"Picked up settings changed on the web: {trip.get('event') or 'trip'} ({trip.get('mode')})")
+        return True
+    return False
+
+
 def publish(reason=""):
     """Replace the tracker-data branch with a single commit holding config.json + location_history.json.
 
@@ -149,15 +178,16 @@ def publish(reason=""):
     s = load_settings()
     repo, branch = s.get("repo", "").strip(), s.get("branch") or "tracker-data"
     if not repo:
-        log("Not publishing: no GitHub repo set yet (Publishing section of the setup page).")
+        log("Not publishing: no GitHub repo set yet (Settings > Publishing to GitHub).")
         return False
     token = github_token(s)
     if not token:
-        log("Not publishing: no GitHub token set yet (Publishing section of the setup page).")
+        log("Not publishing: no GitHub key set yet (Settings > Publishing to GitHub).")
         return False
-    config = read_json(CONFIG_FILE, {})
-    history = load_history()
     try:
+        sync_remote_config(repo, branch, token)
+        config = read_json(CONFIG_FILE, {})
+        history = load_history()
         code, tree = github("POST", f"/repos/{repo}/git/trees", token, {"tree": [
             {"path": "config.json", "mode": "100644", "type": "blob", "content": json.dumps(config, indent=2, ensure_ascii=False)},
             {"path": "location_history.json", "mode": "100644", "type": "blob", "content": json.dumps(history, indent=1, ensure_ascii=False)},
@@ -176,7 +206,7 @@ def publish(reason=""):
                 raise RuntimeError(explain_github_error(code, resp, repo))
         elif code != 200:
             raise RuntimeError(explain_github_error(code, _, repo))
-    except Exception as e:  # noqa: BLE001 - shown to the user in the setup page
+    except Exception as e:  # noqa: BLE001 - shown to the user in Settings
         status["last_error"] = str(e)
         log(f"Publish failed: {e}")
         return False
@@ -201,7 +231,7 @@ def explain_github_error(code, data, repo):
 def check_once():
     s = load_settings()
     if not s.get("airtag_id") and not s.get("airtag_name"):
-        log("No AirTag chosen yet. Pick one in the AirTag section of the setup page.")
+        log("No AirTag chosen yet. Pick one in Settings > Tracker on this Mac.")
         return
     status["last_check"] = time.time()
     try:
@@ -255,6 +285,12 @@ def check_once():
 def tracking_loop():
     while True:
         s = load_settings()
+        token = github_token(s) if s.get("repo") else ""
+        if token:
+            try:
+                sync_remote_config(s["repo"], s.get("branch") or "tracker-data", token)
+            except Exception as e:  # noqa: BLE001 - offline etc.; try again next time
+                log(f"Couldn't check GitHub for web changes: {e}")
         if s.get("tracking"):
             check_once()
         wake.wait(max(1, float(s.get("interval_minutes") or 2)) * 60)
@@ -296,13 +332,11 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._host_ok():
             return self.send_error(403)
         path = urlparse(self.path).path
-        if path in ("/setup", "/setup/"):
-            body = SETUP_PAGE.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
+        if path in ("/setup", "/setup/"):  # old bookmark: settings now live in the page's gear panel
+            self.send_response(302)
+            self.send_header("Location", "/?settings")
             self.end_headers()
-            return self.wfile.write(body)
+            return None
         if path == "/api/state":
             return self._send_json(api_state())
         if path == "/api/items":
@@ -314,7 +348,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json({"error": str(e)}, 400)
             except Exception as e:  # noqa: BLE001
                 return self._send_json({"error": f"Couldn't read Find My: {e}"}, 500)
-        if path in PUBLIC_FILES or path.startswith(PUBLIC_PREFIXES):
+        # Check the path the file server will actually open: "/data/../tracker/local_settings.json"
+        # must not slip past the prefix check (it holds the GitHub key).
+        real = posixpath.normpath(unquote(path))
+        if "\\" not in real and (real in PUBLIC_FILES or real.startswith(PUBLIC_PREFIXES)):
             return super().do_GET()
         self.send_error(404)
 
@@ -444,7 +481,7 @@ ROUTES = {
 
 def main():
     if sys.platform != "darwin":
-        print("Note: reading AirTags only works on a Mac. The setup page and viewer will still open so you can look around.\n")
+        print("Note: reading AirTags only works on a Mac. The tracker page and its settings will still open so you can look around.\n")
     LIVE.mkdir(exist_ok=True)
     if not CONFIG_FILE.exists():
         shutil.copy(DATA / "config.json", CONFIG_FILE)
@@ -454,11 +491,11 @@ def main():
         server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
         print(f"Port {PORT} is busy - the tracker is probably already running. Opening it in your browser.")
-        webbrowser.open(f"http://localhost:{PORT}/setup")
+        webbrowser.open(f"http://localhost:{PORT}/?settings")
         return
     threading.Thread(target=tracking_loop, daemon=True).start()
-    url = f"http://localhost:{PORT}/setup"
-    log(f"Tracker running. Setup page: {url}   (press Ctrl+C here to quit)")
+    url = f"http://localhost:{PORT}/?settings"
+    log(f"Tracker running at http://localhost:{PORT}   (settings: the gear, top right; Ctrl+C here to quit)")
     if load_settings().get("tracking"):
         log("Tracking was ON when the tracker last stopped, so it has resumed.")
     webbrowser.open(url)

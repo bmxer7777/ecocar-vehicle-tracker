@@ -1,14 +1,15 @@
-// EcoCAR Vehicle Tracker - public viewer
+// EcoCAR Vehicle Tracker - public page
 //
-// Everything trip-specific comes from config.json (written by the setup page on the Mac).
+// Everything trip-specific comes from config.json, edited through the Settings panel (settings.js).
 // Where the data is read from:
 //   ?demo                     -> data/demo/ (made-up trip, for trying it out)
-//   localhost / 127.0.0.1     -> data/live/ (the Mac tracker's working files)
+//   localhost / 127.0.0.1     -> data/live/ (the tracker Mac's working files)
 //   GitHub Pages              -> the repo's "tracker-data" branch via raw.githubusercontent.com,
 //                                so location updates never trigger a Pages rebuild.
 
 const REFRESH_MS = 60 * 1000;
 const STOP_RADIUS_MILES = 2;
+const DEFAULT_COLOR = '#02539E';
 const params = new URLSearchParams(location.search);
 const DEMO = params.has('demo');
 const IS_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
@@ -28,16 +29,30 @@ const STATES = {
     'Ontario': 'ON', 'Quebec': 'QC'
 };
 const STATE_NAMES = Object.fromEntries(Object.entries(STATES).map(([k, v]) => [v, k]));
+const MODE_LABELS = { driving: 'En route', parked: 'At the event', idle: 'Not traveling' };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-let map, teams = { tracks: {}, teams: [] };
+let map, baseLayer, labelLayer;
 const layers = {};
-let firstRender = true;
 let lastRouteKey = null;
 let plannedRoute = null;
 let chargersLoadedFor = null;
+let lastHomeId;
+let lastFitKey = null;
+
+// Shared with settings.js
+const Tracker = window.Tracker = {
+    demo: DEMO,
+    local: IS_LOCAL,
+    teams: { tracks: {}, teams: [] },
+    data: null,              // last loaded { config, locations, source }
+    configOverride: null,    // a just-saved (or demo-edited) config, used until the published copy catches up
+    refresh: null,
+    publishTarget: null,     // { repo, branch } for the public page
+};
 
 // ---------- data loading ----------
 
@@ -54,7 +69,7 @@ function repoFromPagesUrl() {
     return first ? `${m[1]}/${first}` : `${m[1]}/${m[1]}.github.io`;
 }
 
-async function loadTripData() {
+async function fetchTripData() {
     if (DEMO) {
         const [config, history] = await Promise.all([getJSON('data/demo/config.json'), getJSON('data/demo/location_history.json')]);
         return { config, locations: shiftDemoTimes(config, history.locations || []), source: 'demo' };
@@ -69,17 +84,30 @@ async function loadTripData() {
     if (!IS_LOCAL) {
         const repo = siteConfig.publish?.repo || repoFromPagesUrl();
         const branch = siteConfig.publish?.branch || 'tracker-data';
+        Tracker.publishTarget = repo ? { repo, branch } : null;
         if (repo) {
             const base = `https://raw.githubusercontent.com/${repo}/${branch}/`;
             try {
                 const [config, history] = await Promise.all([getJSON(base + 'config.json'), getJSON(base + 'location_history.json')]);
                 return { config, locations: history.locations || [], source: 'github' };
             } catch (e) {
-                console.warn('No published tracker data yet, using files bundled with the site.', e);
+                console.warn('No published tracker data yet, using the settings bundled with the site.', e);
             }
         }
     }
     return { config: siteConfig, locations: [], source: 'template' };
+}
+
+async function loadTripData() {
+    const data = await fetchTripData();
+    // GitHub's raw file cache can lag a few minutes behind a save; keep showing the saved version until it catches up.
+    const o = Tracker.configOverride;
+    if (o && (DEMO || !data.config.updated_at || Date.parse(data.config.updated_at) < Date.parse(o.updated_at))) {
+        data.config = structuredClone(o);
+    } else {
+        Tracker.configOverride = null;
+    }
+    return data;
 }
 
 // The demo file has fixed timestamps; slide them so the trip looks "live" right now.
@@ -161,6 +189,7 @@ function fmtAgo(ms) {
     if (h < 48) return `${h}h ${mins % 60}m ago`;
     return `${Math.floor(h / 24)} days ago`;
 }
+Object.assign(Tracker, { fmtAgo, fmtShort, esc });
 
 function stateOf(loc) {
     const a = loc.address || {};
@@ -173,17 +202,51 @@ function placeLabel(loc) {
     return { main: a.locality || a.subAdministrativeArea || `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`, sub: a.administrativeArea || '' };
 }
 
+// ---------- theme ----------
+
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+function themeChoice() {
+    try { return localStorage.getItem('tracker-theme') || 'auto'; } catch (e) { return 'auto'; }
+}
+function isDark() {
+    const t = themeChoice();
+    return t === 'dark' || (t === 'auto' && darkQuery.matches);
+}
+function setTheme(choice) {
+    try { choice === 'auto' ? localStorage.removeItem('tracker-theme') : localStorage.setItem('tracker-theme', choice); } catch (e) { /* private mode */ }
+    if (choice === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = choice;
+    applyTheme();
+}
+Tracker.setTheme = setTheme;
+Tracker.themeChoice = themeChoice;
+
+function applyTheme() {
+    const dark = isDark();
+    $('theme-label').textContent = dark ? 'Light mode' : 'Dark mode';
+    $('theme-icon').innerHTML = dark
+        ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'
+        : '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+    if (!map) return;
+    // Esri's canvas basemaps need no API key. Base and labels are separate tile sets.
+    const style = dark ? 'Dark_Gray' : 'Light_Gray';
+    const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+    baseLayer?.remove();
+    labelLayer?.remove();
+    baseLayer = L.tileLayer(`${esri}World_${style}_Base/MapServer/tile/{z}/{y}/{x}`, {
+        attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors', maxZoom: 16
+    }).addTo(map);
+    labelLayer = L.tileLayer(`${esri}World_${style}_Reference/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16, pane: 'labels' }).addTo(map);
+    if (Tracker.data) redrawRouteStyles();
+}
+
 // ---------- map ----------
 
 function initMap() {
     map = L.map('map', { zoomControl: true, maxZoom: 16 }).setView([37.5, -92], 4);
-    // Esri's dark gray canvas needs no API key (CARTO's dark tiles now do). Base + labels are separate layers.
-    const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
-    L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
-        maxZoom: 16
-    }).addTo(map);
-    L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, pane: 'overlayPane' }).addTo(map);
+    map.createPane('labels');
+    map.getPane('labels').style.zIndex = 450;          // above routes, below markers
+    map.getPane('labels').style.pointerEvents = 'none';
 
     for (const name of ['route', 'traveled', 'trail', 'places', 'gm', 'stellantis', 'home', 'chargers', 'current']) {
         layers[name] = L.layerGroup();
@@ -204,7 +267,7 @@ function initMap() {
         body.hidden = !body.hidden;
         $('layers-toggle').setAttribute('aria-expanded', String(!body.hidden));
     });
-    if (window.innerWidth < 860) $('layers-body').hidden = true;
+    if (window.innerWidth < 760) $('layers-body').hidden = true;
     new ResizeObserver(() => map.invalidateSize()).observe($('map'));
 }
 
@@ -221,18 +284,19 @@ function teamIcon(team, size) {
 
 function drawTeams(homeId) {
     for (const k of ['gm', 'stellantis', 'home']) layers[k].clearLayers();
-    for (const team of teams.teams) {
+    for (const team of Tracker.teams.teams) {
         const isHome = team.id === homeId;
-        const track = teams.tracks[team.track];
-        const marker = L.marker([team.lat, team.lng], { icon: teamIcon(team, isHome ? 26 : team.logo ? 24 : 16), zIndexOffset: isHome ? 500 : 0 })
-            .bindTooltip(`<b>${esc(team.name)}</b>${isHome ? ' (home team)' : ''}<br>${esc(team.city)}<br><span style="color:#888">${esc(track?.name || team.track)}${track ? ' · ' + esc(track.vehicle) : ''}</span>`,
-                { direction: 'top', className: 'map-tooltip', offset: [0, -6] });
-        marker.addTo(isHome ? layers.home : (layers[team.track] || layers.gm));
+        const track = Tracker.teams.tracks[team.track];
+        L.marker([team.lat, team.lng], { icon: teamIcon(team, isHome ? 26 : team.logo ? 24 : 16), zIndexOffset: isHome ? 500 : 0 })
+            .bindTooltip(`<b>${esc(team.name)}</b>${isHome ? ' (home team)' : ''}<br>${esc(team.city)}<br>` +
+                `<span style="opacity:.7">${esc(track?.name || team.track)}${track ? ' · ' + esc(track.vehicle) : ''}</span>`,
+                { direction: 'top', className: 'map-tooltip', offset: [0, -6] })
+            .addTo(isHome ? layers.home : (layers[team.track] || layers.gm));
     }
 }
 
-function emojiIcon(emoji, cls = 'pin-marker') {
-    return L.divIcon({ className: '', html: `<div class="${cls}">${emoji}</div>`, iconSize: [24, 24], iconAnchor: [12, 20] });
+function emojiIcon(emoji) {
+    return L.divIcon({ className: '', html: `<div class="pin-marker">${emoji}</div>`, iconSize: [24, 24], iconAnchor: [12, 20] });
 }
 
 function drawPlaces(trip, stopStatus) {
@@ -242,7 +306,7 @@ function drawPlaces(trip, stopStatus) {
     }
     (trip.stops || []).filter(validPlace).forEach((s, i) => {
         const done = stopStatus[i]?.arrived;
-        L.circleMarker([s.lat, s.lng], { radius: 7, color: '#fff', weight: 2, fillColor: done ? '#00d4ff' : '#555', fillOpacity: 1 })
+        L.circleMarker([s.lat, s.lng], { radius: 7, color: '#fff', weight: 2, fillColor: done ? '#02539E' : '#8A94A6', fillOpacity: 1 })
             .bindTooltip(`<b>Stop ${i + 1}</b><br>${esc(s.name)}`, { direction: 'top', className: 'map-tooltip' })
             .addTo(layers.places);
     });
@@ -250,16 +314,16 @@ function drawPlaces(trip, stopStatus) {
         const label = trip.mode === 'parked' ? 'Venue' : 'Destination';
         L.marker([trip.destination.lat, trip.destination.lng], { icon: emojiIcon('🏁') })
             .bindPopup(`<b>${label}</b><br>${esc(trip.destination.name)}`).addTo(layers.places);
-        L.circle([trip.destination.lat, trip.destination.lng], { radius: (trip.arrival_radius_miles || 0.75) * 1609, color: '#00ff88', weight: 1, fillOpacity: 0.05 }).addTo(layers.places);
+        L.circle([trip.destination.lat, trip.destination.lng], { radius: (trip.arrival_radius_miles || 0.75) * 1609, color: '#FFCB06', weight: 2, fillOpacity: 0.08 }).addTo(layers.places);
     }
 }
 
 function drawVehicle(config, locations) {
     layers.trail.clearLayers();
     layers.current.clearLayers();
-    const color = config.vehicle?.color || '#00d4ff';
+    const color = config.vehicle?.color || DEFAULT_COLOR;
     locations.slice(0, -1).forEach(l => {
-        L.circleMarker([l.latitude, l.longitude], { radius: 2.5, color, weight: 0, fillOpacity: 0.6 })
+        L.circleMarker([l.latitude, l.longitude], { radius: 3, color: '#fff', weight: 1, fillColor: color, fillOpacity: 0.9 })
             .bindTooltip(fmtShort(l.timestamp * 1000), { className: 'map-tooltip' })
             .addTo(layers.trail);
     });
@@ -267,21 +331,33 @@ function drawVehicle(config, locations) {
     if (!cur) return;
     const icon = L.divIcon({
         className: '',
-        html: `<div style="background:${esc(color)};border:3px solid #fff;border-radius:50%;width:20px;height:20px;box-shadow:0 0 20px ${esc(color)};"></div>`,
-        iconSize: [20, 20], iconAnchor: [10, 10]
+        html: `<div style="background:${esc(color)};border:3px solid #fff;border-radius:50%;width:22px;height:22px;box-shadow:0 0 0 4px rgba(255,203,6,.55),0 1px 4px rgba(0,0,0,.5);"></div>`,
+        iconSize: [22, 22], iconAnchor: [11, 11]
     });
     const where = placeLabel(cur);
     L.marker([cur.latitude, cur.longitude], { icon, zIndexOffset: 1000 })
         .bindPopup(`<b>${esc(config.vehicle?.name || 'Vehicle')}</b><br>${esc(where.main)}${where.sub ? ', ' + esc(where.sub) : ''}<br>` +
-            `<span style="color:#888">Seen ${esc(fmtAgo(Date.now() - cur.timestamp * 1000))}` +
+            `<span style="opacity:.7">Seen ${esc(fmtAgo(Date.now() - cur.timestamp * 1000))}` +
             `${cur.accuracy ? ` · ±${Math.round(cur.accuracy)} m` : ''}</span>`)
         .addTo(layers.current);
+}
+
+let lastTraveledGeometry = null, lastPlannedGeometry = null;
+function redrawRouteStyles() {
+    layers.route.clearLayers();
+    if (lastPlannedGeometry) L.polyline(lastPlannedGeometry, { color: cssVar('--route-planned'), weight: 3, opacity: 0.8, dashArray: '6 8' }).addTo(layers.route);
+    layers.traveled.clearLayers();
+    if (lastTraveledGeometry) {
+        const color = Tracker.data?.config?.vehicle?.color || DEFAULT_COLOR;
+        L.polyline(lastTraveledGeometry, { color: '#fff', weight: 8, opacity: 0.9 }).addTo(layers.traveled);   // casing keeps it readable on any map
+        L.polyline(lastTraveledGeometry, { color, weight: 5, opacity: 1 }).addTo(layers.traveled);
+    }
 }
 
 // DC fast chargers along the planned route, from the DOE Alternative Fuels Station Locator.
 const CONNECTORS = { J1772COMBO: 'CCS', TESLA: 'NACS (Tesla)', CHADEMO: 'CHAdeMO', J1772: 'J1772' };
 async function loadChargers() {
-    const cfg = window.__config;
+    const cfg = Tracker.data?.config || {};
     const note = $('chargers-note');
     if (!plannedRoute) { note.textContent = 'Needs a planned route (start + destination).'; return; }
     if (chargersLoadedFor === lastRouteKey) return;
@@ -298,10 +374,10 @@ async function loadChargers() {
         if (!res.ok) throw new Error(res.status);
         const data = await res.json();
         for (const s of data.fuel_stations || []) {
-            L.circleMarker([s.latitude, s.longitude], { radius: 4, color: '#ffd400', weight: 1, fillColor: '#ffd400', fillOpacity: 0.85 })
+            L.circleMarker([s.latitude, s.longitude], { radius: 4, color: '#1C2B57', weight: 1, fillColor: '#FFCB06', fillOpacity: 0.95 })
                 .bindPopup(`<b>⚡ ${esc(s.station_name)}</b><br>${esc(s.ev_network || '')}<br>` +
                     `${esc(s.street_address)}, ${esc(s.city)}, ${esc(s.state)}<br>` +
-                    `<span style="color:#888">${s.ev_dc_fast_num || '?'} DC fast · ${esc((s.ev_connector_types || []).map(c => CONNECTORS[c] || c).join(', '))}</span>`)
+                    `<span style="opacity:.7">${s.ev_dc_fast_num || '?'} DC fast · ${esc((s.ev_connector_types || []).map(c => CONNECTORS[c] || c).join(', '))}</span>`)
                 .addTo(layers.chargers);
         }
         chargersLoadedFor = lastRouteKey;
@@ -358,32 +434,36 @@ function setHeadline(label, value) {
 
 function setFreshness(trip, cur) {
     const dot = $('status-dot'), text = $('status-text'), fix = $('last-fix');
+    dot.className = 'dot';
     if (!cur) {
-        fix.textContent = 'none yet';
-        dot.style.background = '#666';
-        text.textContent = trip.mode === 'idle' ? 'Tracker off' : 'Waiting for first AirTag ping';
+        fix.textContent = '';
+        text.textContent = trip.mode === 'idle' ? 'Tracker off' : 'Waiting for the first AirTag update';
         return;
     }
     const age = Date.now() - cur.timestamp * 1000;
-    fix.textContent = `${fmtShort(cur.timestamp * 1000)} (${fmtAgo(age)})`;
-    fix.className = age < 20 * 60e3 ? 'fresh-good' : age < 90 * 60e3 ? 'fresh-warn' : 'fresh-bad';
-    if (trip.mode === 'idle') { dot.style.background = '#666'; text.textContent = 'Tracker off'; return; }
-    if (age < 20 * 60e3) { dot.style.background = '#00ff88'; text.textContent = 'Tracking live'; }
-    else if (age < 90 * 60e3) { dot.style.background = '#ffaa00'; text.textContent = 'AirTag update delayed'; }
-    else { dot.style.background = '#ff4444'; text.textContent = 'No recent AirTag update'; }
+    fix.textContent = `· last AirTag fix ${fmtAgo(age)}`;
+    fix.title = fmtDate(cur.timestamp * 1000);
+    if (trip.mode === 'idle') { text.textContent = 'Tracker off'; return; }
+    if (age < 20 * 60e3) { dot.classList.add('live'); text.textContent = 'Tracking live'; }
+    else if (age < 90 * 60e3) { dot.classList.add('warn'); text.textContent = 'AirTag update delayed'; }
+    else { dot.classList.add('bad'); text.textContent = 'No recent AirTag update'; }
 }
 
 async function render({ config, locations: all }) {
-    window.__config = config;
     const trip = config.trip || {};
     const vehicle = config.vehicle || {};
-    document.documentElement.style.setProperty('--accent', vehicle.color || '#00d4ff');
+    const team = Tracker.teams.teams.find(t => t.id === config.team?.id);
     document.title = `${vehicle.name || 'Vehicle'} Tracker · ${config.team?.name || 'EcoCAR'}`;
     $('vehicle-name').textContent = vehicle.name || 'Vehicle';
-    $('subtitle').textContent = [trip.event, config.team?.name].filter(Boolean).join(' · ');
-    if (config.team?.logo) { $('team-logo').src = config.team.logo; $('team-logo').hidden = false; }
+    $('subtitle').textContent = config.team?.name || 'EcoCAR Innovation Challenge';
+    $('team-logo').hidden = !config.team?.logo;
+    if (config.team?.logo) $('team-logo').src = config.team.logo;
+    $('eyebrow').textContent = [trip.event, MODE_LABELS[trip.mode]].filter(Boolean).join(' · ');
+    $('hero-vehicle').innerHTML = vehicle.full_name || team
+        ? `<b>${esc(vehicle.full_name || vehicle.name || '')}</b>${esc(team ? `${team.short} · ${Tracker.teams.tracks[team.track]?.name || ''}` : '')}`
+        : '';
 
-    if (firstRender) drawTeams(config.team?.id);
+    if (config.team?.id !== lastHomeId) { drawTeams(config.team?.id); lastHomeId = config.team?.id; }
 
     const locations = tripLocations(trip, all);
     const cur = locations[locations.length - 1];
@@ -398,30 +478,24 @@ async function render({ config, locations: all }) {
 
     // Planned route: origin -> stops -> destination (not in parked mode).
     const planned = [trip.origin, ...(trip.stops || []), trip.destination].filter(validPlace);
-    const routeKey = planned.map(p => `${p.lat},${p.lng}`).join('|');
-    if (trip.mode !== 'parked' && planned.length >= 2) {
-        if (routeKey !== lastRouteKey) {
-            plannedRoute = await osrmRoute(planned);
-            lastRouteKey = routeKey;
-            layers.route.clearLayers();
-            if (plannedRoute) L.polyline(plannedRoute.geometry, { color: '#9aa', weight: 3, opacity: 0.6, dashArray: '6 8' }).addTo(layers.route);
-            if ($('layer-chargers').checked) loadChargers();
-        }
-    } else {
-        layers.route.clearLayers();
-        plannedRoute = null;
+    const routeKey = trip.mode + '|' + planned.map(p => `${p.lat},${p.lng}`).join('|');
+    if (routeKey !== lastRouteKey) {
+        plannedRoute = trip.mode !== 'parked' && planned.length >= 2 ? await osrmRoute(planned) : null;
         lastRouteKey = routeKey;
+        lastPlannedGeometry = plannedRoute?.geometry || null;
+        if ($('layer-chargers').checked) loadChargers();
     }
 
     // Path actually driven so far.
-    layers.traveled.clearLayers();
     let traveled = 0;
+    lastTraveledGeometry = null;
     if (trip.mode === 'driving' && locations.length) {
         const pts = [...(validPlace(trip.origin) ? [trip.origin] : []), ...locations.map(pt)];
         const snapped = await osrmRoute(thin(pts, 3, 80));
         traveled = snapped ? snapped.miles : straightMiles(pts);
-        L.polyline(snapped ? snapped.geometry : pts.map(p => [p.lat, p.lng]), { color: vehicle.color || '#00d4ff', weight: 4, opacity: 0.9 }).addTo(layers.traveled);
+        lastTraveledGeometry = snapped ? snapped.geometry : pts.map(p => [p.lat, p.lng]);
     }
+    redrawRouteStyles();
 
     // Remaining: current position -> stops not reached yet -> destination.
     let remaining = null;
@@ -433,25 +507,26 @@ async function render({ config, locations: all }) {
     // Headline + progress
     $('progress-container').hidden = true;
     const destName = trip.destination?.name || 'destination';
+    const radius = trip.arrival_radius_miles || 0.75;
     if (trip.mode === 'idle') {
         const future = trip.departure && Date.parse(trip.departure) > now;
-        setHeadline(future ? `Next: ${trip.event || 'trip'} · departs ` : '', future ? fmtDate(Date.parse(trip.departure)) : 'Not currently traveling');
+        setHeadline(future ? `Next trip to ${destName} departs ` : '', future ? fmtDate(Date.parse(trip.departure)) : 'Not currently traveling');
     } else if (trip.mode === 'parked') {
-        if (cur && validPlace(trip.destination) && miles(pt(cur), trip.destination) <= (trip.arrival_radius_miles || 0.75)) {
+        if (cur && validPlace(trip.destination) && miles(pt(cur), trip.destination) <= radius) {
             let i = locations.length - 1;
-            while (i > 0 && miles(pt(locations[i - 1]), trip.destination) <= (trip.arrival_radius_miles || 0.75)) i--;
+            while (i > 0 && miles(pt(locations[i - 1]), trip.destination) <= radius) i--;
             setHeadline(`At ${destName} since `, fmtDate(locations[i].timestamp * 1000));
         } else if (cur) {
             const w = placeLabel(cur);
             setHeadline('Away from the venue, near ', `${w.main}${w.sub ? ', ' + w.sub : ''}`);
         } else {
-            setHeadline(`${trip.event || 'Event'}: `, destName);
+            setHeadline('Event venue: ', destName);
         }
     } else if (destStatus?.arrived) {
-        setHeadline(`Arrived at ${destName}: `, fmtDate(destStatus.arrived));
+        setHeadline(`Arrived at ${destName} `, fmtDate(destStatus.arrived));
         showProgress(100);
     } else if (!cur) {
-        setHeadline(depMs > now ? 'Departs ' : 'Waiting for the first AirTag ping', depMs > now ? fmtDate(depMs) : '');
+        setHeadline(depMs > now ? `Departs for ${destName} ` : 'Waiting for the first AirTag update', depMs > now ? fmtDate(depMs) : '');
     } else if (remaining) {
         setHeadline(`ETA to ${destName}: `, fmtDate(now + remaining.seconds * 1000));
         showProgress(traveled / (traveled + remaining.miles) * 100);
@@ -495,14 +570,16 @@ async function render({ config, locations: all }) {
     renderSplits(splits);
     renderStats(locations);
 
-    if (firstRender) {
+    // Re-frame the map when the trip itself changes (first load, or after editing settings).
+    const fitKey = routeKey;
+    if (fitKey !== lastFitKey) {
         const b = L.latLngBounds([]);
         if (plannedRoute) b.extend(plannedRoute.geometry);
         if (trip.mode === 'parked') { if (validPlace(trip.destination)) b.extend([trip.destination.lat, trip.destination.lng]); }
         else planned.forEach(p => b.extend([p.lat, p.lng]));
         if (cur) b.extend([cur.latitude, cur.longitude]);
         if (b.isValid()) map.fitBounds(b, { padding: [50, 50], maxZoom: trip.mode === 'parked' ? 14 : 12 });
-        firstRender = false;
+        lastFitKey = fitKey;
     }
 }
 
@@ -510,7 +587,7 @@ function showProgress(pct) {
     pct = Math.max(0, Math.min(100, pct));
     $('progress-container').hidden = false;
     $('progress-fill').style.width = pct + '%';
-    $('progress-text').textContent = Math.round(pct) + '%';
+    $('progress-text').textContent = Math.round(pct) + '% of the way';
 }
 
 function renderRecentSpeed(locations) {
@@ -552,6 +629,7 @@ function renderTimeline(trip, stopStatus, locations, depMs) {
         const st = stopStatus[stopStatus.length - 1];
         add('Destination', trip.destination.name, st?.arrived ? 'Arrived ' + fmtShort(st.arrived) : 'Not arrived yet', st?.arrived ? 'done' : (started && nextIdx === stopStatus.length - 1 ? 'current' : ''));
     }
+    if (!ol.children.length) ol.innerHTML = '<li class="empty-note">No trip set up yet. Open Settings (gear, top right) to add one.</li>';
 }
 
 function renderSplits(splits) {
@@ -573,8 +651,8 @@ function renderSplits(splits) {
 
 function renderStats(locations) {
     const cards = [];
-    const card = (label, value, detail = '') => cards.push(`<div class="journey-stat-card"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="detail">${esc(detail)}</div></div>`);
-    card('AirTag pings', locations.length, 'location updates this trip');
+    const card = (label, value, detail = '') => cards.push(`<div class="journey-stat-card card"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="detail">${esc(detail)}</div></div>`);
+    card('AirTag updates', locations.length, 'locations recorded this trip');
     let gaps = [], maxMph = 0, maxAt = '', movingMiles = 0, movingHrs = 0;
     for (let i = 1; i < locations.length; i++) {
         const a = locations[i - 1], b = locations[i];
@@ -588,8 +666,8 @@ function renderStats(locations) {
         }
     }
     const typical = gaps.filter(g => g < 4 * 3600);
-    card('Typical ping interval', typical.length ? `${Math.round(typical.reduce((a, b) => a + b, 0) / typical.length / 60)} min` : '--', 'AirTags update when an iPhone passes nearby');
-    card('Longest gap', gaps.length ? fmtSpan(Math.max(...gaps) * 1000).value : '--', 'between two pings');
+    card('Typical update interval', typical.length ? `${Math.round(typical.reduce((a, b) => a + b, 0) / typical.length / 60)} min` : '--', 'AirTags update when an iPhone passes nearby');
+    card('Longest gap', gaps.length ? fmtSpan(Math.max(...gaps) * 1000).value : '--', 'between two updates');
     card('Top speed seen', maxMph ? `${Math.round(maxMph)} mph` : '--', maxAt ? `near ${maxAt}` : '');
     card('Average moving speed', movingHrs ? `${Math.round(movingMiles / movingHrs)} mph` : '--', 'ignores stops');
     $('journey-stats').innerHTML = cards.join('');
@@ -602,24 +680,37 @@ document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click
     document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + btn.dataset.tab));
     if (btn.dataset.tab === 'map') map.invalidateSize();
 }));
+$('theme-btn').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
+darkQuery.addEventListener('change', () => { if (themeChoice() === 'auto') applyTheme(); });
 
+let refreshing = null;
 async function refresh() {
-    try {
-        await render(await loadTripData());
-        $('page-refresh').textContent = new Date().toLocaleTimeString();
-    } catch (e) {
-        console.error(e);
-        $('status-dot').style.background = '#ff4444';
-        $('status-text').textContent = location.protocol === 'file:'
-            ? 'Open this through the tracker app or GitHub Pages, not by double-clicking the file'
-            : 'Could not load tracker data';
-    }
+    if (refreshing) return refreshing;
+    refreshing = (async () => {
+        try {
+            Tracker.data = await loadTripData();
+            await render(Tracker.data);
+            $('page-refresh').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        } catch (e) {
+            console.error(e);
+            $('status-dot').className = 'dot bad';
+            $('status-text').textContent = location.protocol === 'file:'
+                ? 'Open this through the tracker app or GitHub Pages, not by double-clicking the file'
+                : 'Could not load tracker data';
+        } finally {
+            refreshing = null;
+        }
+    })();
+    return refreshing;
 }
+Tracker.refresh = refresh;
 
 (async function main() {
     $('demo-banner').hidden = !DEMO;
     initMap();
-    try { teams = await getJSON('data/teams.json'); } catch (e) { console.warn('No teams.json', e); }
+    applyTheme();
+    try { Tracker.teams = await getJSON('data/teams.json'); } catch (e) { console.warn('No teams.json', e); }
     await refresh();
     setInterval(refresh, REFRESH_MS);
+    document.dispatchEvent(new Event('tracker-ready'));
 })();
